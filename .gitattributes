@@ -1,0 +1,9 @@
+# Check out every text file with LF line endings, whatever the local Git settings (core.autocrlf on Windows):
+# some files are copied byte for byte into the dataset and a rebuild is compared byte for byte with the published
+# dataset, and the tests read code out of demo/route_planner/index.html.
+* text=auto eol=lf
+# Keep the tables byte for byte as committed: some are UTF-8 with BOM and CRLF line endings, which the build checks
+# (scripts/kb_places_env.sh).
+*.csv -text
+# Shell scripts must keep LF line endings to run.
+*.sh text eol=lf

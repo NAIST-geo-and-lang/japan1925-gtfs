@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>1925年4月・経路検索デモ（乗換あり）</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+                 font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+                 background: #0d1117; color: #e6edf3; }
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #0d1117; }
+    /* darken the GSI pale map to match the page (see "Basemap" in the script) */
+    .tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.4); }
+
+    .panel {
+        position: absolute; background: rgba(13,17,23,0.88);
+        border: 1px solid #30363d; border-radius: 8px; padding: 14px 18px;
+        z-index: 500; backdrop-filter: blur(6px);
+    }
+
+    /* search panel (top) */
+    #search-panel { top: 16px; left: 16px; right: 16px; padding: 12px 18px; }
+    #search-panel h1 { display: inline-block; margin: 0 18px 0 0; font-size: 16px;
+                        color: #f0f6fc; letter-spacing: 1px; vertical-align: middle; }
+    .search-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .search-row label { font-size: 13px; color: #8b949e; }
+    .search-row input[type=text] {
+        background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+        border-radius: 6px; padding: 6px 10px; font-size: 14px; width: 160px;
+        font-family: inherit;
+    }
+    .search-row input[type=time] {
+        background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+        border-radius: 6px; padding: 6px 8px; font-size: 13px; font-family: inherit;
+    }
+    button.ctrl {
+        background: #1f6feb; color: #fff; border: 1px solid #1f6feb;
+        border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+        font-family: inherit;
+    }
+    button.ctrl:hover { background: #2479ff; }
+    button.ctrl.secondary { background: #21262d; color: #c9d1d9; border-color: #30363d; }
+    button.ctrl.secondary:hover { background: #30363d; }
+    button.preset { font-size: 12px; padding: 4px 10px; background: rgba(31,111,235,0.15);
+                    border-color: rgba(31,111,235,0.5); color: #79c0ff; }
+    button.preset:hover { background: rgba(31,111,235,0.3); }
+    .preset-row { margin-top: 8px; }
+    .preset-row .preset-label { font-size: 11px; color: #6e7681; margin-right: 6px; }
+
+    /* candidates panel */
+    #candidates-panel {
+        top: 130px; left: 16px; width: 320px; max-height: calc(100vh - 230px);
+        overflow-y: auto; padding: 10px 14px; display: none;
+    }
+    #candidates-panel h3 { margin: 0 0 8px; font-size: 13px; color: #8b949e;
+                            font-weight: 500; letter-spacing: 1px; }
+    .candidate {
+        padding: 10px 12px; margin-bottom: 8px; background: #21262d;
+        border: 1px solid #30363d; border-radius: 6px; cursor: pointer;
+    }
+    .candidate:hover { background: #2d333b; }
+    .candidate.selected { border-color: #1f6feb; background: rgba(31,111,235,0.12); }
+    .cand-head { display: flex; justify-content: space-between; align-items: center;
+                 font-size: 14px; color: #f0f6fc; margin-bottom: 4px; }
+    .cand-head .total { font-weight: 600; }
+    .cand-detail { font-size: 11px; color: #8b949e; line-height: 1.6; }
+    .cand-detail .leg { display: flex; gap: 6px; align-items: center; margin: 2px 0; }
+    .cand-detail .leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    /* mark on a row that merges continuations of the same through train */
+    .cand-detail .leg-through { font-size: 9px; padding: 0 4px; margin-left: 5px; border-radius: 3px;
+                                background: rgba(86,211,100,0.18); color: #56d364;
+                                border: 1px solid rgba(86,211,100,0.4); }
+    .no-result { font-size: 13px; color: #8b949e; padding: 8px; }
+    .leg-wait.leg-stay { color: #56d364; }   /* continuation of the same through train (not a transfer) */
+    /* other views (routes by viewpoint) */
+    .vp-head { margin: 14px 0 6px; font-size: 11px; color: #8b949e; letter-spacing: 1px;
+               border-top: 1px solid #30363d; padding-top: 10px; }
+    .vp-tag { display: inline-block; font-size: 10px; padding: 1px 6px; margin: 0 4px 3px 0;
+              border-radius: 9px; background: rgba(31,111,235,0.2); color: #79c0ff;
+              border: 1px solid rgba(31,111,235,0.45); }
+    .vp-none { font-size: 11px; color: #6e7681; padding: 2px 2px 6px; }
+
+    /* trip panel (right) */
+    #trip-panel {
+        top: 130px; right: 16px; width: 310px; max-height: calc(100vh - 230px);
+        overflow-y: auto; padding: 14px 16px; display: none;
+    }
+    #trip-panel h3 { margin: 0 0 4px; font-size: 16px; color: #f0f6fc; }
+    #trip-panel .sub { font-size: 12px; color: #8b949e; margin-bottom: 10px; line-height: 1.6; }
+    .leg-block { margin-bottom: 16px; padding-left: 12px; border-left: 3px solid; }
+    .leg-header {
+        font-size: 13px; color: #f0f6fc; margin-bottom: 4px; font-weight: 500;
+    }
+    .leg-header .line-tag { font-size: 11px; color: #8b949e; margin-left: 6px; }
+    .leg-wait {
+        background: rgba(180, 100, 0, 0.15); color: #ffa657; padding: 4px 8px;
+        border-radius: 3px; font-size: 11px; margin: 4px 0; display: inline-block;
+    }
+    .stop-row {
+        display: flex; padding: 3px 0 3px 8px; font-size: 12px; gap: 8px;
+        align-items: baseline; border-radius: 3px;
+    }
+    .stop-row.passed { color: #6e7681; }
+    .stop-row.current { color: #f0f6fc; background: rgba(31,111,235,0.25); font-weight: 600; }
+    .stop-t { color: #79c0ff; font-variant-numeric: tabular-nums; min-width: 42px; font-size: 11px; }
+    .stop-n { flex: 1; }
+
+    /* playback controls (bottom) */
+    #control-panel {
+        bottom: 16px; left: 16px; right: 16px; padding: 12px 20px; display: none;
+    }
+    #control-row { display: flex; align-items: center; gap: 12px; }
+    #clock-mini {
+        font-size: 22px; color: #f0f6fc; font-variant-numeric: tabular-nums;
+        letter-spacing: 2px; min-width: 80px; text-align: center;
+    }
+    #progress-slider { flex: 1; }
+    .speed-group { display: flex; gap: 4px; }
+    .speed-group button { min-width: 64px; font-size: 12px; padding: 6px 8px; }
+    .speed-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px;
+                 padding: 6px 12px; font-family: inherit; cursor: pointer; font-size: 12px; }
+    .speed-btn.active { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+    button.ctrl.primary { background: #238636; border-color: #238636; }
+    button.ctrl.primary:hover { background: #2ea043; }
+
+    .leaflet-control-attribution {
+        background: rgba(13,17,23,0.7) !important;
+        color: #8b949e !important; font-size: 10px !important;
+    }
+    .leaflet-control-attribution a { color: #58a6ff !important; }
+    .leaflet-tooltip {
+        background: rgba(13,17,23,0.95) !important;
+        border: 1px solid #30363d !important;
+        color: #e6edf3 !important;
+        font-size: 11px !important; padding: 2px 6px !important;
+    }
+    .leaflet-tooltip::before { display: none !important; }
+
+    *::-webkit-scrollbar { width: 8px; }
+    *::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="search-panel" class="panel">
+    <div class="search-row">
+        <h1>1925年4月 経路検索</h1>
+
+<!-- Provenance of the data (feed_version of the dataset the network was built from), read from meta in router_data.js
+     after router_data.js has loaded. -->
+<div id="data-meta" style="font-size:11px;opacity:.65;margin:4px 0 0;line-height:1.4"></div>
+<script>
+window.addEventListener('DOMContentLoaded', function showDataMeta(){
+  var el = document.getElementById('data-meta');
+  if (!el) return;
+  var m = (typeof ROUTER_DATA !== 'undefined' && ROUTER_DATA && ROUTER_DATA.meta) || null;
+  if (!m) { el.textContent = '⚠ データの素性が記録されていません'; return; }
+  el.textContent = 'データ: Japan1925-GTFS ' + (m.feed_version || '?') + '（駅 ' + m.groups + '・便 ' + m.trips + '）';
+});
+</script>
+        <label>出発</label>
+        <input type="text" id="origin-input" list="stations-dl" placeholder="例：東京">
+        <label>→</label>
+        <input type="text" id="dest-input" list="stations-dl" placeholder="例：京都">
+        <label>時刻</label>
+        <input type="time" id="time-input" value="08:00">
+        <button id="search-btn" class="ctrl">検索</button>
+        <button id="reset-btn" class="ctrl secondary">リセット</button>
+    </div>
+    <div class="preset-row">
+        <span class="preset-label">例：</span>
+        <button class="ctrl preset" data-o="東京" data-d="京都" data-t="08:00">東京→京都</button>
+        <button class="ctrl preset" data-o="東京" data-d="下關" data-t="08:00">東京→下関</button>
+        <button class="ctrl preset" data-o="東京" data-d="青森" data-t="08:00">東京→青森</button>
+        <button class="ctrl preset" data-o="新宿" data-d="松本" data-t="08:00">新宿→松本</button>
+        <button class="ctrl preset" data-o="京都" data-d="奈良" data-t="09:00">京都→奈良</button>
+        <button class="ctrl preset" data-o="釜山〈朝鮮〉" data-d="長春〈滿洲〉" data-t="08:00">釜山→長春</button>
+        <button class="ctrl preset" data-o="東京" data-d="札幌" data-t="08:00">東京→札幌</button>
+    </div>
+    <datalist id="stations-dl"></datalist>
+</div>
+
+<div id="candidates-panel" class="panel">
+    <h3>検索結果</h3>
+    <div id="candidate-list"></div>
+</div>
+
+<div id="trip-panel" class="panel">
+    <h3 id="tp-title">―</h3>
+    <div class="sub" id="tp-sub">―</div>
+    <div id="tp-legs"></div>
+</div>
+
+<div id="control-panel" class="panel">
+    <div id="control-row">
+        <button id="play-btn" class="ctrl primary">▶ 出発</button>
+        <div id="clock-mini">00:00</div>
+        <input type="range" id="progress-slider" min="0" max="1000" value="0">
+        <button id="follow-btn" class="speed-btn active" title="マーカー追従パン">🎯 追従</button>
+        <div class="speed-group">
+            <button class="speed-btn" data-speed="15">ゆっくり</button>
+            <button class="speed-btn active" data-speed="60">ふつう</button>
+            <button class="speed-btn" data-speed="240">はやい</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="router_data.js"></script>
+<script>
+(function () {
+    'use strict';
+    // ===== Map =====
+    const map = L.map('map', { preferCanvas: true, zoomControl: false })
+                 .setView([36.0, 137.0], 5);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    // Basemap: the pale map of GSI Tiles (Geospatial Information Authority of Japan), which needs no key.
+    // A CSS filter (.tiles-dark) darkens it to match the page; GSI's terms ask for the source and, for
+    // modified tiles, a note that they were modified. Zoom levels 5–8 of the pale map also need the source
+    // of their shoreline data (VMAP0), as the GSI tile list asks. Detailed tiles exist only for Japan and its
+    // surroundings, so the background disappears when zooming in on Taiwan, Karafuto, Korea or Manchuria.
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+        attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>（淡色地図）を加工して作成。'
+            + 'Shoreline data is derived from: United States. National Imagery and Mapping Agency. '
+            + '"Vector Map Level 0 (VMAP0)." Bethesda, MD: Denver, CO: The Agency; USGS Information Services, 1997.',
+        maxZoom: 18, className: 'tiles-dark',
+    }).addTo(map);
+    const renderer = L.canvas({ padding: 0.5 });
+
+    // pause following when the user drags the map
+    map.on('dragstart', () => { followMap = false; updateFollowBtn(); });
+
+    // ===== Data =====
+    const DATA = ROUTER_DATA;
+    // station name autocomplete
+    const stationNames = Object.keys(DATA.name_to_groups).sort();
+    const dl = document.getElementById('stations-dl');
+    for (const n of stationNames) {
+        const opt = document.createElement('option');
+        opt.value = n;
+        dl.appendChild(opt);
+    }
+    // groupTrips index
+    DATA.groupTrips = {};
+    DATA.trips.forEach(function (t, ti) {
+        t.s.forEach(function (gid) {
+            if (!DATA.groupTrips[gid]) DATA.groupTrips[gid] = [];
+            DATA.groupTrips[gid].push(ti);
+        });
+    });
+
+    // line colors (by region)
+    const REGION_COLOR = {
+        chosen: '#4ecdc4', taiwan: '#ffe66d', karafuto: '#a8e6cf',
+        manshu: '#c89bff', ferry: '#7fbfff', naichi: '#ff6b6b', other: '#9aa0a6',
+    };
+    function regionOf(line) {
+        if (!line) return 'other';
+        if (line === '連絡汽船' || line.indexOf('連絡船') >= 0) return 'ferry';
+        if (line.indexOf('朝鮮') >= 0 || line.indexOf('京義') >= 0 || line.indexOf('京釜') >= 0) return 'chosen';
+        if (line.indexOf('臺灣') >= 0 || line.indexOf('台灣') >= 0) return 'taiwan';
+        if (line.indexOf('樺太') >= 0) return 'karafuto';
+        if (line.indexOf('滿洲') >= 0 || line.indexOf('満洲') >= 0 || line.indexOf('安奉') >= 0) return 'manshu';
+        return line.indexOf('本線') >= 0 ? 'naichi' : 'other';
+    }
+    function lineColor(line) { return REGION_COLOR[regionOf(line)] || '#9aa0a6'; }
+
+    // Implemented in the search core below (RouterCore); the display code also uses these names.
+    function toMin(s) { return RouterCore.toMin(s); }
+    function stopName(DATA, trip, i) { return RouterCore.stopName(DATA, trip, i); }  // name of the station actually served
+    function tripLabel(trip) { return RouterCore.tripLabel(trip); }  // trip label = the printed number only
+    function fmtClock(min) {
+        min = ((min % 1440) + 1440) % 1440;
+        return String(Math.floor(min / 60)).padStart(2, '0') + ':' +
+               String(Math.floor(min % 60)).padStart(2, '0');
+    }
+    function fmtDuration(min) {
+        const h = Math.floor(min / 60), m = Math.floor(min % 60);
+        if (h === 0) return `${m}分`;
+        if (m === 0) return `${h}時間`;
+        return `${h}時間${m}分`;
+    }
+    // Station and line names come from the data (router_data.js, which make_router_data.py can also build from another
+    //   feed), so escape them before they are put into HTML.
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+
+    function resolveGroupIds(name) {
+        if (!name) return null;
+        if (DATA.name_to_groups[name]) return DATA.name_to_groups[name];
+        // simple substring match
+        const cands = stationNames.filter(n => n.indexOf(name) >= 0);
+        if (cands.length === 0) return null;
+        return DATA.name_to_groups[cands[0]];
+    }
+
+    // ===== Router =====
+    // vvv The search core, between the ROUTER_CORE markers. scripts/route_planner_probe.js and the tests
+    //     (tests/route_search/, tests/pyraptor/) extract and run it from here, so keep the markers.
+    // <<<ROUTER_CORE>>>
+    /**
+     * Search core of the journey planner.
+     *
+     * Embedded in this page (rather than loaded as an external .js) so the page works when opened directly
+     * from disk. Becomes the global `RouterCore` in the browser and module.exports in node.
+     *
+     * Usage:
+     *   const router = RouterCore.createRouter(DATA);          // DATA = ROUTER_DATA
+     *   const path   = router.findRoute(fromGids, toGids, depMin, blockedLines);
+     *   const paths  = router.findMultipleRoutes(fromGids, toGids, depMin, 3);
+     *
+     * Search switches (PARAMS). The five groups below are false here and turned on by router_params in the data
+     * (environment variables of scripts/generate_router_data.py, all on by default; previous behavior = set the
+     * variable to 0, which writes no flag). Without the flags the search behaves as before.
+     *   EXACT_CANDIDATES + PARETO_TRANSFERS (ROUTER_EXACT_SEARCH): how boarding candidates are chosen and which paths
+     *     are kept at each station. Always on together (either alone makes some searches worse).
+     *   PREV_DAY_BOARDING + PARETO_CONTINUATION (ROUTER_PREV_DAY_BOARDING): also board today's run of trips that left
+     *     the previous day. On together (previous-day boarding alone lets a faster path remove a path that can continue
+     *     on the same train). Each leg then carries dayShift (day shift of the boarded trip, in minutes), which the
+     *     page uses instead of recomputing day crossings (recomputed as before when absent).
+     *   TIE_FEWER_TRANSFERS (ROUTER_TIE_FEWER_TRANSFERS): among paths arriving at the same time, take the one with fewer transfers.
+     *   WALK_LABELS_SEPARATE (ROUTER_WALK_LABELS_SEPARATE): a path that arrived on foot does not remove a path that
+     *     arrived by train at that station.
+     *   NO_REVISIT (ROUTER_NO_REVISIT): no path returns to a station where it already boarded or alighted.
+     */
+    (function (root, factory) {
+      if (typeof module === 'object' && module.exports) module.exports = factory();
+      else (typeof globalThis !== 'undefined' ? globalThis : root).RouterCore = factory();
+    }(this, function () {
+      'use strict';
+
+      var PARAMS = {
+        MAX_TRANSFERS: 10, WAIT_MAX_MIN: 2880,
+        PRUNE_MARGIN_MIN: 360, UPDATE_MARGIN_MIN: 0, LONGEST_MAX_GAP_MIN: 360,
+        // The next two stay false here and are turned on by router_params in router_data (ROUTER_EXACT_SEARCH of generate_router_data.py, on by default)
+        EXACT_CANDIDATES: false,   // boarding candidates = earliest trip per stop sequence (with overtaking in a sequence, every trip that arrives earlier somewhere)
+        PARETO_TRANSFERS: false,   // paths kept at each station = those not beaten on both arrival time and transfers (so the transfer limit does not lose routes)
+        // The next two stay false here and are turned on by router_params in router_data (ROUTER_PREV_DAY_BOARDING of generate_router_data.py, on by default)
+        PREV_DAY_BOARDING: false,  // also shift boarding times back by days = board today's run of trips that left the previous day; legs then carry dayShift
+        // PARETO_CONTINUATION (with PARETO_TRANSFERS only): a path that can continue on the same train is beaten only by such a path
+        //   or by one with one transfer fewer. With EXACT_CANDIDATES, trips that later continue on the same train are kept as
+        //   candidates regardless of sequence.
+        PARETO_CONTINUATION: false,
+        // Stays false here; turned on by router_params in router_data (ROUTER_TIE_FEWER_TRANSFERS of generate_router_data.py, on by default).
+        //   Among paths reaching the destination at the same time, take the one with fewer transfers. false = the first found (previous behavior).
+        //   The search for the earliest arrival is unchanged (only the choice among equal arrivals).
+        TIE_FEWER_TRANSFERS: false,
+        // Stays false here; turned on by router_params in router_data (ROUTER_WALK_LABELS_SEPARATE of generate_router_data.py, on by default).
+        //   (with PARETO_TRANSFERS only) keep paths that arrived on foot in a separate table. Such a path cannot walk on
+        //   (no chained walks), so it is weaker than a path that arrived by train and must not remove it.
+        //   A path that arrived on foot is beaten only by a train arrival (same or earlier, same or fewer transfers) or another walking arrival.
+        //   false = compare both in one table (previous behavior).
+        WALK_LABELS_SEPARATE: false,
+        // Stays false here; turned on by router_params in router_data (ROUTER_NO_REVISIT of generate_router_data.py, on by default).
+        //   No path comes back to a station where it already boarded, alighted, arrived on foot or started
+        //   (excluded as alighting and walking targets). Real travelers do not return to such a station (they would wait there).
+        //   Stations merely passed through are not counted (passing on an express and coming back on a local is natural).
+        //   false = allow returning (previous behavior).
+        NO_REVISIT: false,
+        // How candidates after the first are found. true = by arrival (search again from just after the first departure,
+        //   without blocking lines). Default true. false = previous behavior (block the line ridden longest in the
+        //   first route and search again); set via createRouter(DATA, { CANDIDATES_BY_ARRIVAL: false }) or router_params.
+        CANDIDATES_BY_ARRIVAL: true,
+        // Maximum number of searches for candidates = maxRoutes x this.
+        //   Candidates that only leave earlier for the same arrival are discarded, so more searches than routes may be needed.
+        CANDIDATE_TRIES_FACTOR: 4,
+        // Show "other views" (routes by viewpoint, findRoutesByViewpoint) below the candidate list:
+        //   (1) earliest arrival (2) fewest transfers (3) printed times only (no estimated trips) (4) no walking.
+        //   false hides this section (only the candidate list, as before).
+        VIEWPOINT_ROUTES: true,
+      };
+
+      // Time string "H:MM" -> minutes. Times after 24:00 (e.g. "32:00", crossing midnight) are converted as is.
+      function toMin(s) {
+        if (!s) return null;
+        var a = s.split(':');
+        if (a.length !== 2) return null;
+        var h = parseInt(a[0], 10), m = parseInt(a[1], 10);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 60 + m;
+      }
+
+      // Display name of the station at index i of a trip = the station actually served (group name if not in trip.sn).
+      // Station groups also merge nearby stations, so the group name (smaller id) can differ from the stop name
+      // (鹿兒島 and 停車場前). Transfers are shown with the actual station names.
+      function stopName(DATA, trip, i) {
+        if (trip && trip.sn && trip.sn[i] != null) return trip.sn[i];
+        return DATA.groups[trip.s[i]].name;
+      }
+
+      // Trip label (shown on the page) = only the number printed in the original.
+      //   - `7`      -> `7号` (the printed number)
+      //   - `7_b`    -> `7号`. `_b` / `_c` are suffixes added during processing, not in the original
+      //                (to tell apart trips with the same number on the same line name; e.g. `連絡汽船` covers
+      //                青函, 關門, 下關釜山, 宮島, 稚泊 ... under one line name and each route's table prints "7":
+      //                `7_b` = 下關→釜山, `7_c` = 宮島→嚴島町).
+      //   - `此間12分毎` -> `此間12分毎（推定）` (estimated trip expanded from a section that gives only the headway)
+      //   - `Up0105_tb001-4_1` -> `番号なし` (no number). Keys starting with a Latin letter are internal keys for
+      //                trips with no printed number; do not show them as numbers.
+      //   - `イ`, `甲`, `不ニ` etc. -> as is (symbols printed in the original; no `号` appended)
+      function tripLabel(trip) {
+        var n = (trip && trip.n != null) ? String(trip.n) : '';
+        if (trip && trip.est) return n + '（推定）';
+        if (/^\d+$/.test(n)) return n + '号';
+        var m = /^(\d+)_[a-z]$/.exec(n);
+        if (m) return m[1] + '号';
+        if (!n || /^[A-Za-z]/.test(n)) return '番号なし';
+        return n;
+      }
+
+      // group_id -> indexes of trips stopping there (search index)
+      function buildGroupTrips(DATA) {
+        DATA.groupTrips = {};
+        DATA.trips.forEach(function (t, ti) {
+          t.s.forEach(function (gid) {
+            if (!DATA.groupTrips[gid]) DATA.groupTrips[gid] = [];
+            DATA.groupTrips[gid].push(ti);
+          });
+        });
+        return DATA.groupTrips;
+      }
+
+      // Preparation for EXACT_CANDIDATES: the stop-sequence ID of each trip, and whether trips in a sequence overtake.
+      //   Trips run daily, so sort by first departure normalized to 0-24 h and check neighbors (and the last trip
+      //   against the next day's first) for any reversal of arrivals or departures. Sequences with a trip whose times
+      //   go backwards, a trip without a time at the first station, or timed stations differing by trip are treated as
+      //   overtaking to be safe (all their trips are compared).
+      function buildPatterns(DATA) {
+        if (DATA._patterns) return DATA._patterns;
+        const of = new Array(DATA.trips.length), members = [], idOf = new Map();
+        DATA.trips.forEach(function (t, ti) {
+          const key = t.s.join(',');
+          let pid = idOf.get(key);
+          if (pid === undefined) { pid = members.length; idOf.set(key, pid); members.push([]); }
+          of[ti] = pid;
+          members[pid].push(ti);
+        });
+        const fifo = members.map(function (tis) { return patternIsFifo(DATA, tis); });
+        DATA._patterns = { of: of, fifo: fifo };
+        return DATA._patterns;
+      }
+
+      function patternIsFifo(DATA, tis) {
+        const rows = [];
+        for (const ti of tis) {
+          const t = DATA.trips[ti], times = [];
+          let prev = null;
+          for (let k = 0; k < t.s.length; k++) {
+            const a = toMin(t.arr[k]) ?? toMin(t.dep[k]);
+            const d = toMin(t.dep[k]) ?? toMin(t.arr[k]);
+            if (a == null) { times.push(null); continue; }
+            if (d < a || (prev != null && a < prev)) return false;
+            times.push([a, d]);
+            prev = d;
+          }
+          if (times[0] == null) return false;
+          const base = Math.floor(times[0][1] / 1440) * 1440;
+          rows.push(times.map(function (x) { return x && [x[0] - base, x[1] - base]; }));
+        }
+        if (rows.length < 2) return true;
+        rows.sort(function (x, y) { return x[0][1] - y[0][1]; });
+        function noLater(x, y, shift) {
+          for (let k = 0; k < x.length; k++) {
+            if ((x[k] == null) !== (y[k] == null)) return false;
+            if (x[k] == null) continue;
+            if (x[k][0] > y[k][0] + shift || x[k][1] > y[k][1] + shift) return false;
+          }
+          return true;
+        }
+        for (let q = 0; q + 1 < rows.length; q++) if (!noLater(rows[q], rows[q + 1], 0)) return false;
+        return noLater(rows[rows.length - 1], rows[0], 1440);
+      }
+
+      // Preparation for PARETO_CONTINUATION: per through train p, which trips can be boarded at which station; and per
+      //   trip, the last index of a station where another trip of the same through train can be boarded (-1 if none).
+      function buildContinuations(DATA) {
+        if (DATA._continuations) return DATA._continuations;
+        const board = new Map();
+        DATA.trips.forEach(function (t, ti) {
+          if (!t.p) return;
+          let m = board.get(t.p);
+          if (!m) { m = new Map(); board.set(t.p, m); }
+          for (let i = 0; i < t.s.length - 1; i++) {
+            const a = m.get(t.s[i]);
+            if (!a) m.set(t.s[i], [ti]);
+            else if (a[a.length - 1] !== ti) a.push(ti);
+          }
+        });
+        const lastIdx = new Int32Array(DATA.trips.length).fill(-1);
+        DATA.trips.forEach(function (t, ti) {
+          if (!t.p) return;
+          const m = board.get(t.p);
+          for (let j = t.s.length - 1; j >= 1; j--) {
+            const a = m.get(t.s[j]);
+            if (a && (a.length > 1 || a[0] !== ti)) { lastIdx[ti] = j; break; }
+          }
+        });
+        DATA._continuations = { board: board, lastIdx: lastIdx };
+        return DATA._continuations;
+      }
+
+      function createRouter(DATA, params) {
+        var ROUTER_PARAMS = Object.assign({}, PARAMS, DATA.router_params || {}, params || {});
+        if (!DATA.groupTrips) buildGroupTrips(DATA);
+        var patterns = ROUTER_PARAMS.EXACT_CANDIDATES ? buildPatterns(DATA) : null;
+        var conts = (ROUTER_PARAMS.PARETO_TRANSFERS && ROUTER_PARAMS.PARETO_CONTINUATION) ? buildContinuations(DATA) : null;
+
+        function heapLess(a, b) {
+            if (a.time !== b.time) return a.time < b.time;
+            return a.transfers < b.transfers;
+        }
+        function heapPush(heap, item) {
+            heap.push(item);
+            let i = heap.length - 1;
+            while (i > 0) {
+                const p = (i - 1) >> 1;
+                if (!heapLess(heap[i], heap[p])) break;
+                const t = heap[p]; heap[p] = heap[i]; heap[i] = t;
+                i = p;
+            }
+        }
+        function heapPop(heap) {
+            const top = heap[0];
+            const last = heap.pop();
+            if (heap.length > 0) {
+                heap[0] = last;
+                let i = 0, n = heap.length;
+                while (true) {
+                    const l = 2*i + 1, r = l + 1; let s = i;
+                    if (l < n && heapLess(heap[l], heap[s])) s = l;
+                    if (r < n && heapLess(heap[r], heap[s])) s = r;
+                    if (s === i) break;
+                    const t = heap[s]; heap[s] = heap[i]; heap[i] = t;
+                    i = s;
+                }
+            }
+            return top;
+        }
+
+        // Whether a trip continues the same through train (same p) as the previous ride: not a transfer (always false without p)
+        // Walking legs (leg.walk===true) are not rides, so skip them when looking for the previous trip
+        function lastRideIdx(path) {
+            for (var i = path.length - 1; i >= 0; i--) if (!path[i].walk) return i;
+            return -1;
+        }
+
+        function isContinuation(path, tripIdx) {
+            var i = lastRideIdx(path);
+            if (i < 0) return false;
+            // after a walk it is not a continuation, even on the same through train (boarding again at another station)
+            for (var k = i + 1; k < path.length; k++) if (path[k].walk) return false;
+            var prev = DATA.trips[path[i].tripIdx];
+            var next = DATA.trips[tripIdx];
+            return !!(prev.p && next.p && prev.p === next.p && prev !== next);
+        }
+
+        // Number of transfers = through trains ridden - 1 (rides - 1 in data without p). Walking legs are not counted
+        function countTransfers(path) {
+            var n = 0, first = true;
+            for (var i = 0; i < path.length; i++) {
+                if (path[i].walk) continue;
+                if (first) { first = false; continue; }
+                if (!isContinuation(path.slice(0, i), path[i].tripIdx)) n++;
+            }
+            return n;
+        }
+
+        // Arrival (minutes) when alighting at index j of trip. cand = the boarded candidate (effDep, dayShift). null if one cannot alight.
+        function arrivalAt(trip, j, cand) {
+            const arrMin = toMin(trip.arr[j]) ?? toMin(trip.dep[j]);
+            // Intermediate stations of estimated trips (est, expanded from frequency boxes "此間○分毎" in frequencies.txt)
+            //   have names only and no times (none are printed, so none are made up). One cannot alight at an untimed
+            //   station (only at the timed ends). Printed trips as before.
+            if (trip.est && arrMin == null) return null;
+            let arrTime = (arrMin != null) ? arrMin + cand.dayShift : cand.effDep;
+            while (arrTime < cand.effDep) arrTime += 1440;
+            return arrTime;
+        }
+
+        // EXACT_CANDIDATES, sequences with overtaking: in order of departure, keep only trips that arrive somewhere earlier than all previous ones
+        function keepFaster(list) {
+            list.sort(function (a, b) { return a.effDep - b.effDep || a.tripIdx - b.tripIdx; });
+            const minArr = [], out = [];
+            for (const c of list) {
+                const trip = DATA.trips[c.tripIdx];
+                let faster = false;
+                for (let j = c.startIdx + 1; j < trip.s.length; j++) {
+                    const at = arrivalAt(trip, j, c);
+                    if (at == null) continue;
+                    if (minArr[j] === undefined || at < minArr[j]) { minArr[j] = at; faster = true; }
+                }
+                if (faster) out.push(c);
+            }
+            return out;
+        }
+
+        // One leg of an itinerary. With PREV_DAY_BOARDING only, it also carries dayShift (day shift of the boarded trip in
+        //   minutes, negative for a previous-day trip), because a backward shift cannot be recovered from the data's times.
+        //   When off, the same shape as before (same key order).
+        function makeLeg(cand, boardStation, alightStation, j, prevDay) {
+            const leg = {
+                tripIdx: cand.tripIdx, boardStation: boardStation,
+                boardIdx: cand.startIdx, alightStation: alightStation, alightIdx: j,
+            };
+            if (prevDay) leg.dayShift = cand.dayShift;
+            return leg;
+        }
+
+        // Walking leg. No trip, so no tripIdx (readers check leg.walk)
+        function makeWalkLeg(fromG, toG, minutes) {
+            return { walk: true, boardStation: fromG, alightStation: toG, walkMin: minutes };
+        }
+
+        // PARETO_CONTINUATION: on arriving at station g by trip (index tripIdx), the p of its through train if another trip of it can be boarded at g
+        function continuationAt(trip, tripIdx, g) {
+            if (!conts || !trip.p) return null;
+            const m = conts.board.get(trip.p);
+            const a = m && m.get(g);
+            if (!a) return null;
+            for (let k = 0; k < a.length; k++) if (a[k] !== tripIdx) return trip.p;
+            return null;
+        }
+
+        /**
+         * @param opts restrictions for viewpoints
+         *   maxTransfers = transfer limit (default PARAMS.MAX_TRANSFERS)
+         *   noEst = do not board estimated trips (sections printed only as "此間○分毎"), i.e. printed times only
+         *   noWalk = do not use walking links
+         */
+        function findRoute(fromGids, toGids, depMin, blockedLines, opts) {
+            blockedLines = blockedLines || {};
+            opts = opts || {};
+            const maxTransfers = (opts.maxTransfers !== undefined && opts.maxTransfers !== null)
+                ? opts.maxTransfers : ROUTER_PARAMS.MAX_TRANSFERS;
+            const exact = !!ROUTER_PARAMS.EXACT_CANDIDATES;
+            const pareto = !!ROUTER_PARAMS.PARETO_TRANSFERS;
+            const prevDay = !!ROUTER_PARAMS.PREV_DAY_BOARDING;
+            const paretoCont = pareto && !!conts;
+            // TIE_FEWER_TRANSFERS: for paths reaching the destination at the same time, take fewer transfers (tr = transfers; continuations not counted)
+            const tieFewer = !!ROUTER_PARAMS.TIE_FEWER_TRANSFERS;
+            function better(t, tr) {
+                if (!best || t < best.arrTime) return true;
+                return tieFewer && t === best.arrTime && tr < best.transfers;
+            }
+            const toSet = {};
+            toGids.forEach(g => toSet[g] = true);
+            const bestTime = {};
+            // PARETO_TRANSFERS: earliest arrival per station and number of transfers (labels[station][transfers])
+            const labels = {};
+            // WALK_LABELS_SEPARATE: table of walking arrivals (walkLabels[station][transfers]); when on, labels holds only train arrivals (and the origin)
+            const walkSep = pareto && !!ROUTER_PARAMS.WALK_LABELS_SEPARATE;
+            const walkLabels = {};
+            // NO_REVISIT: stations this path already boarded or alighted at (origin, boarding and alighting stations of each leg, walk targets)
+            const noRevisit = !!ROUTER_PARAMS.NO_REVISIT;
+            function visitedOf(cur) {
+                const v = new Set([cur.station]);
+                for (let k = 0; k < cur.path.length; k++) {
+                    v.add(cur.path[k].boardStation);
+                    v.add(cur.path[k].alightStation);
+                }
+                return v;
+            }
+            function bestUpTo(st, tr, tbl) {
+                const L = (tbl || labels)[st];
+                let m = Infinity;
+                if (!L) return m;
+                for (let k = 0; k <= tr && k < L.length; k++) if (L[k] !== undefined && L[k] < m) m = L[k];
+                return m;
+            }
+            function setLabel(st, tr, t, tbl) {
+                const T = tbl || labels;
+                const L = T[st] || (T[st] = []);
+                if (L[tr] === undefined || t < L[tr]) L[tr] = t;
+            }
+            // PARETO_CONTINUATION: earliest arrival per station, through train and transfers (only paths that can continue on that train)
+            const contLabels = {};
+            function bestUpToCont(st, p, tr) {
+                const byP = contLabels[st];
+                const L = byP && byP.get(p);
+                let m = Infinity;
+                if (!L) return m;
+                for (let k = 0; k <= tr && k < L.length; k++) if (L[k] !== undefined && L[k] < m) m = L[k];
+                return m;
+            }
+            function setContLabel(st, p, tr, t) {
+                const byP = contLabels[st] || (contLabels[st] = new Map());
+                let L = byP.get(p);
+                if (!L) { L = []; byP.set(p, L); }
+                if (L[tr] === undefined || t < L[tr]) L[tr] = t;
+            }
+            const heap = [];
+            let best = null;  // earliest arrival at the destination { arrTime, path }
+            fromGids.forEach(g => {
+                bestTime[g] = depMin;
+                if (pareto) setLabel(g, 0, depMin);
+                heapPush(heap, { station: g, time: depMin, transfers: 0, path: [] });
+            });
+            while (heap.length > 0) {
+                const cur = heapPop(heap);
+                // The heap pops in time order, so branches later than the best arrival can no longer improve it.
+                // With TIE_FEWER_TRANSFERS, branches at the best arrival time with fewer transfers are still explored
+                //   (0-minute legs are possible). Equal times pop in order of transfers, so once a branch has as many
+                //   transfers as best, nothing later can improve
+                if (best && (cur.time > best.arrTime ||
+                    (cur.time === best.arrTime && (!tieFewer || cur.transfers >= best.transfers)))) break;
+                if (cur.transfers >= maxTransfers) continue;
+                let contOnly = false;
+                if (walkSep && cur.walked) {
+                    // WALK_LABELS_SEPARATE: a walking arrival is beaten by a train arrival (same or earlier, same or fewer
+                    //   transfers; it has every onward trip and walk) or by another walking arrival (the usual rule)
+                    if (bestUpTo(cur.station, cur.transfers) <= cur.time) continue;
+                    if (bestUpTo(cur.station, cur.transfers - 1, walkLabels) <= cur.time) continue;
+                    if (walkLabels[cur.station][cur.transfers] < cur.time) continue;
+                } else if (pareto) {
+                    // skip this path if the station already has a path with fewer transfers arriving no later, or the same transfers arriving earlier
+                    if (bestUpTo(cur.station, cur.transfers - 1) <= cur.time) continue;
+                    if (cur.contP) {
+                        // PARETO_CONTINUATION: a path that can continue on the same train is beaten only by such paths.
+                        //   If another path arrived earlier with the same transfers, only the continuation is worth exploring
+                        if (contLabels[cur.station].get(cur.contP)[cur.transfers] < cur.time) continue;
+                        contOnly = labels[cur.station][cur.transfers] < cur.time;
+                    } else if (labels[cur.station][cur.transfers] < cur.time) continue;
+                } else if (bestTime[cur.station] !== undefined &&
+                    cur.time > bestTime[cur.station] + ROUTER_PARAMS.PRUNE_MARGIN_MIN) continue;
+                const visited = noRevisit ? visitedOf(cur) : null;
+                // Walking links (only when the data has walks): walk to a nearby station.
+                //   - no chained walks (cur.walked), to keep the search small
+                //   - transfers are not incremented (a walk is not a transfer; the next boarded trip adds 1)
+                //   - walking to the destination counts as arrival
+                if (DATA.walks && !cur.walked && !opts.noWalk) {
+                    const ws = DATA.walks[cur.station] || [];
+                    for (let wi = 0; wi < ws.length; wi++) {
+                        const toG = ws[wi][0], wmin = ws[wi][1];
+                        if (visited && visited.has(toG)) continue;   // NO_REVISIT: do not walk back to a station already used
+                        const wt = cur.time + wmin;
+                        if (toSet[toG]) {
+                            if (better(wt, cur.transfers)) {
+                                best = { arrTime: wt, transfers: cur.transfers,
+                                         path: cur.path.concat([makeWalkLeg(cur.station, toG, wmin)]) };
+                            }
+                            continue;
+                        }
+                        if (pareto) {
+                            if (!(wt < bestUpTo(toG, cur.transfers))) continue;
+                            if (walkSep) {
+                                // WALK_LABELS_SEPARATE: walking arrivals go to their own table (the train table is compared only by train arrivals)
+                                if (!(wt < bestUpTo(toG, cur.transfers, walkLabels))) continue;
+                                setLabel(toG, cur.transfers, wt, walkLabels);
+                            } else setLabel(toG, cur.transfers, wt);
+                        } else {
+                            if (!(bestTime[toG] === undefined || wt < bestTime[toG] - ROUTER_PARAMS.UPDATE_MARGIN_MIN)) continue;
+                            bestTime[toG] = Math.min(bestTime[toG] ?? Infinity, wt);
+                        }
+                        heapPush(heap, {
+                            station: toG, time: wt, transfers: cur.transfers, walked: true,
+                            path: cur.path.concat([makeWalkLeg(cur.station, toG, wmin)]),
+                        });
+                    }
+                }
+                const tripIdxs = DATA.groupTrips[cur.station] || [];
+                const lineEarliest = {}; const endEarliest = {};
+                const patEarliest = {}; const patAll = {}; const continuations = [];
+                for (let ti = 0; ti < tripIdxs.length; ti++) {
+                    const tripIdx = tripIdxs[ti];
+                    const trip = DATA.trips[tripIdx];
+                    const lineKey = trip.l + '__' + trip.d;
+                    if (blockedLines[lineKey]) continue;
+                    if (opts.noEst && trip.est) continue;   // printed times only
+                    if (contOnly && !isContinuation(cur.path, tripIdx)) continue;
+                    const stops = trip.s;
+                    // The same station can appear twice in a trip (a 著 (arrival) row and a 發 (departure) row).
+                    //   Looking only at the first (arrival) would push the whole trip to the next day when the arrival is
+                    //   just before the query time, missing the correct departure. Check every occurrence and take the earliest.
+                    let startIdx = -1, boardDep = null, effDep = null;
+                    for (let i = 0; i < stops.length - 1; i++) {
+                        if (stops[i] !== cur.station) continue;
+                        const bd = toMin(trip.dep[i]) ?? toMin(trip.arr[i]);
+                        if (bd == null) continue;
+                        let ed = bd;
+                        while (ed < cur.time) ed += 1440;
+                        // PREV_DAY_BOARDING: also board today's run of trips that left the previous day. At stations written after 24:00
+                        //   (second half of trips crossing midnight, or trips written a whole day later) the previous day's run may still be ahead.
+                        if (prevDay) while (ed - 1440 >= cur.time) ed -= 1440;
+                        if (effDep === null || ed < effDep) { startIdx = i; boardDep = bd; effDep = ed; }
+                    }
+                    if (startIdx < 0) continue;
+                    if (effDep > cur.time + ROUTER_PARAMS.WAIT_MAX_MIN) continue;
+                    // When boarding a later day's trip, shift arrivals by the same number of days (dayShift).
+                    //   Otherwise voyages longer than 24 hours (long-distance ships, p186-195) would have their arrival
+                    //   wrap around, look up to a day shorter than they are, and be chosen as the best route.
+                    const c = { tripIdx, startIdx, effDep, dayShift: effDep - boardDep };
+                    if (exact) {
+                        // EXACT_CANDIDATES: choose per stop sequence; the earliest trip for sequences without overtaking, keepFaster otherwise.
+                        //   A continuation of the same train (same p) is not a transfer, so keep it regardless of sequence.
+                        if (cur.path.length && isContinuation(cur.path, tripIdx)) continuations.push(c);
+                        // PARETO_CONTINUATION: keep trips that later connect to another trip of the same through train
+                        //   (a slower trip saves one transfer and, near the transfer limit, can arrive before a faster one)
+                        if (conts && conts.lastIdx[tripIdx] > startIdx) continuations.push(c);
+                        const pid = patterns.of[tripIdx];
+                        if (patterns.fifo[pid]) {
+                            if (!patEarliest[pid] || effDep < patEarliest[pid].effDep) patEarliest[pid] = c;
+                        } else {
+                            (patAll[pid] || (patAll[pid] = [])).push(c);
+                        }
+                        continue;
+                    }
+                    // Prune waiting time among trips with the same terminus.
+                    //   A line name such as 連絡汽船 covers several separate routes; comparing by line name alone would drop
+                    //   the 8-hour 關釜 ferry because a frequent 關門 ferry leaves soon (making 釜山 unreachable).
+                    // Estimated trips (est, expanded from frequency boxes "此間○分毎" in frequencies.txt) are compared separately
+                    //   from printed trips, so a slow estimated trip leaving first does not drop a faster printed trip leaving
+                    //   later. Same key as before for data without est.
+                    const endKey = lineKey + '__' + stops[stops.length - 1] + (trip.est ? '__est' : '');
+                    if (!lineEarliest[endKey] || effDep < lineEarliest[endKey].effDep) lineEarliest[endKey] = c;
+                    if (!endEarliest[endKey] || effDep < endEarliest[endKey].effDep) endEarliest[endKey] = c;
+                }
+                const candidates = {};
+                if (exact) {
+                    for (const pid in patEarliest) candidates[patEarliest[pid].tripIdx] = patEarliest[pid];
+                    for (const pid in patAll) keepFaster(patAll[pid]).forEach(c => { candidates[c.tripIdx] = c; });
+                    continuations.forEach(c => { candidates[c.tripIdx] = c; });
+                }
+                for (const ek in endEarliest) {
+                    const c = endEarliest[ek];
+                    const ear = lineEarliest[ek];
+                    if (ear && c.effDep > ear.effDep + ROUTER_PARAMS.LONGEST_MAX_GAP_MIN) continue;
+                    candidates[c.tripIdx] = c;
+                }
+                for (const ck in candidates) {
+                    const cand = candidates[ck];
+                    const trip = DATA.trips[cand.tripIdx];
+                    const stops = trip.s;
+                    // Through trains: continuing on the same train (same trip.p) is not a transfer. p is set when the
+                    //   data is built (generate_router_data.py, ROUTER_PHYSICAL_TRAINS=1). Without p, +1 as before.
+                    const transfers = cur.transfers + (isContinuation(cur.path, cand.tripIdx) ? 0 : 1);
+                    for (let j = cand.startIdx + 1; j < stops.length; j++) {
+                        const alight = stops[j];
+                        // NO_REVISIT: do not alight at a station already used (passing through is fine; later stations remain possible)
+                        if (visited && visited.has(alight)) continue;
+                        const arrTime = arrivalAt(trip, j, cand);
+                        if (arrTime == null) continue;
+                        if (toSet[alight]) {
+                            if (better(arrTime, transfers)) {
+                                best = {
+                                    arrTime, transfers,
+                                    path: cur.path.concat([makeLeg(cand, cur.station, alight, j, prevDay)]),
+                                };
+                            }
+                            continue;
+                        }
+                        if (j > cand.startIdx + 1 && stops[j] === stops[j-1]) continue;
+                        let contP = null;
+                        if (pareto) {
+                            contP = paretoCont ? continuationAt(trip, cand.tripIdx, alight) : null;
+                            if (contP) {
+                                // PARETO_CONTINUATION: a path that can continue is beaten only by such a path or by one with one transfer fewer
+                                if (!(arrTime < Math.min(bestUpTo(alight, transfers - 1), bestUpToCont(alight, contP, transfers)))) continue;
+                                setContLabel(alight, contP, transfers, arrTime);
+                                setLabel(alight, transfers, arrTime);
+                            } else {
+                                if (!(arrTime < bestUpTo(alight, transfers))) continue;
+                                setLabel(alight, transfers, arrTime);
+                            }
+                        } else {
+                            if (!(bestTime[alight] === undefined ||
+                                arrTime < bestTime[alight] - ROUTER_PARAMS.UPDATE_MARGIN_MIN)) continue;
+                            bestTime[alight] = Math.min(bestTime[alight] ?? Infinity, arrTime);
+                        }
+                        const item = {
+                            station: alight, time: arrTime, transfers: transfers,
+                            path: cur.path.concat([makeLeg(cand, cur.station, alight, j, prevDay)]),
+                        };
+                        if (contP) item.contP = contP;
+                        heapPush(heap, item);
+                    }
+                }
+            }
+            return best ? best.path : null;
+        }
+
+        // Departure of an itinerary (minutes) = departure of the first trip, minus a leading walk (same rule as the page)
+        function pathDeparture(path) {
+            let walk = 0;
+            for (let i = 0; i < path.length; i++) {
+                if (path[i].walk) { walk += path[i].walkMin || 0; continue; }
+                const t = DATA.trips[path[i].tripIdx];
+                const bd = toMin(t.dep[path[i].boardIdx]) ?? toMin(t.arr[path[i].boardIdx]);
+                if (bd == null) return null;
+                return bd + (path[i].dayShift !== undefined ? path[i].dayShift : 0) - walk;
+            }
+            return null;   // all legs are walks
+        }
+
+        function findMultipleRoutes(fromGids, toGids, depMin, maxRoutes) {
+            if (ROUTER_PARAMS.CANDIDATES_BY_ARRIVAL) {
+                // By arrival: search again from just after the previous departure.
+                //   findRoute returns the earliest-arriving path from that time on, so later departures arrive later or
+                //   at the same time; the list is in order of arrival. No lines are blocked, so no unrealistic detours.
+                // For the same arrival keep only the latest departure: if the arrival equals the previous candidate's,
+                //   the previous one only leaves earlier and waits longer, so replace it,
+                //   unless the new one has more transfers (the earlier one may have fewer).
+                //   This needs extra searches, capped at maxRoutes x CANDIDATE_TRIES_FACTOR.
+                const out = [];
+                const seen = {};
+                let t = depMin;
+                const maxTries = maxRoutes * ROUTER_PARAMS.CANDIDATE_TRIES_FACTOR;
+                for (let ri = 0; out.length < maxRoutes && ri < maxTries; ri++) {
+                    const path = findRoute(fromGids, toGids, t, {});
+                    if (!path) break;
+                    // Stop when the same sequence of trips repeats. The timetable is treated as daily, so a weekly ship
+                    //   would reappear as the same ship on the following days (e.g. 敦賀→浦鹽斯德 has only one
+                    //   44-hour ship, so candidates 2 and 3 would be +1 and +2 days). The original prints only
+                    //   "weekly", so showing next-day runs as candidates would be wrong.
+                    const sig = path.map(function (l) {
+                        return l.walk ? 'w' + l.boardStation + '-' + l.alightStation
+                                      : l.tripIdx + ':' + l.boardIdx + '-' + l.alightIdx;
+                    }).join('|');
+                    if (seen[sig]) break;
+                    seen[sig] = true;
+                    const d = pathDeparture(path);
+                    const a = pathArrival(path, depMin);
+                    const tr = countTransfers(path);
+                    // drop every earlier candidate that now only waits for the same arrival, not just the previous one
+                    //   (one may remain two or more back when a candidate with more transfers is in between)
+                    while (a != null && out.length
+                           && out[out.length - 1].arr === a && tr <= out[out.length - 1].transfers) {
+                        out.pop();
+                    }
+                    out.push({ path: path, dep: d, arr: a, transfers: tr });
+                    if (d == null) break;                 // all walking: nothing further
+                    t = Math.max(t + 1, d + 1);           // do not repeat the same itinerary
+                }
+                return out.map(function (x) { return x.path; });
+            }
+            const routes = [];
+            const allBlocked = {};
+            for (let ri = 0; ri < maxRoutes; ri++) {
+                const path = findRoute(fromGids, toGids, depMin, ri === 0 ? {} : allBlocked);
+                if (!path) break;
+                routes.push(path);
+                // block the longest leg's line for next iteration
+                if (path.length > 0) {
+                    let longest = null; let longestSpan = -1;
+                    for (const leg of path) {
+                        if (leg.walk) continue;   // walking legs have no line to block
+                        const span = leg.alightIdx - leg.boardIdx;
+                        if (span > longestSpan) { longestSpan = span; longest = leg; }
+                    }
+                    if (!longest) break;
+                    const trip = DATA.trips[longest.tripIdx];
+                    allBlocked[trip.l + '__' + trip.d] = true;
+                }
+            }
+            return routes;
+        }
+        /**
+         * Routes by viewpoint (findRoutesByViewpoint).
+         * Identical itineraries are merged and their labels listed.
+         * Returns [{ key, labels: [...], path }]; key = fastest / fewest_transfers / printed_only / no_walk.
+         */
+        // Arrival of an itinerary (minutes) = arrival of the last trip, plus a trailing walk (same rule as the page)
+        function pathArrival(path, depMin) {
+            let cur = depMin;
+            for (let i = 0; i < path.length; i++) {
+                const l = path[i];
+                if (l.walk) { cur += l.walkMin || 0; continue; }
+                const t = DATA.trips[l.tripIdx];
+                const bd = toMin(t.dep[l.boardIdx]) ?? toMin(t.arr[l.boardIdx]);
+                if (bd == null) return null;
+                let eff = (l.dayShift !== undefined) ? bd + l.dayShift : bd;
+                if (l.dayShift === undefined) while (eff < cur) eff += 1440;
+                const am = toMin(t.arr[l.alightIdx]) ?? toMin(t.dep[l.alightIdx]);
+                let arr = (am != null) ? am + (eff - bd) : eff;
+                while (arr < eff) arr += 1440;
+                cur = arr;
+            }
+            return cur;
+        }
+
+        // Routes by viewpoint:
+        //   (1) earliest arrival (same as candidate 1) (2) fewest transfers (3) printed times only (4) no walking.
+        //   Identical itineraries are merged into one row with all their headings.
+        //   A viewpoint with no route (e.g. reachable only with estimated trips) returns a row with path: null.
+        //   Returns [{ key, labels: [...], path, arr, dep, transfers }] (by arrival; rows without a route last).
+        //   With opts.base the earliest arrival is not searched again (the page passes candidate 1).
+        function findRoutesByViewpoint(fromGids, toGids, depMin, opts) {
+            opts = opts || {};
+            const out = [], none = [], seen = {};
+            function sigOf(path) {
+                return path.map(function (l) {
+                    return l.walk ? 'w' + l.boardStation + '-' + l.alightStation
+                                  : l.tripIdx + ':' + l.boardIdx + '-' + l.alightIdx;
+                }).join('|');
+            }
+            function push(key, label, path) {
+                if (!path) { none.push({ key: key, labels: [label], path: null }); return null; }
+                const sig = sigOf(path);
+                if (seen[sig]) { seen[sig].labels.push(label); return seen[sig]; }
+                const row = {
+                    key: key, labels: [label], path: path,
+                    dep: pathDeparture(path), arr: pathArrival(path, depMin),
+                    transfers: countTransfers(path),
+                };
+                seen[sig] = row;
+                out.push(row);
+                return row;
+            }
+            // opts.base = the earliest-arrival path already found (candidate 1); passing it saves a search
+            const base = opts.base || findRoute(fromGids, toGids, depMin, {});
+            if (!base) return [];
+            push('fastest', 'いちばん早く着く', base);
+            // Fewest transfers: raise the limit one at a time and take the first route found
+            // (a small limit prunes more, so it is fast; raising it to base's transfers always finds one)
+            const baseTr = countTransfers(base);
+            let fewest = null;
+            for (let k = 0; k < baseTr; k++) {
+                const p = findRoute(fromGids, toGids, depMin, {}, { maxTransfers: k });
+                if (p) { fewest = push('fewest_transfers', '乗換がいちばん少ない', p); break; }
+            }
+            // if none is found, base has the fewest (no route with a lower limit)
+            if (!fewest) push('fewest_transfers', '乗換がいちばん少ない', base);
+            // If candidate 1 already satisfies a viewpoint, label it instead of searching again.
+            //   Candidate 1 is the earliest arrival, so if it meets the restriction it is also best under it
+            //   (searching again would yield a path that only leaves earlier for the same arrival).
+            const baseEst = base.some(function (l) { return !l.walk && DATA.trips[l.tripIdx].est; });
+            const baseWalk = base.some(function (l) { return l.walk; });
+            push('printed_only', '刷られた時刻だけ',
+                baseEst ? findRoute(fromGids, toGids, depMin, {}, { noEst: true }) : base);
+            push('no_walk', '歩かない',
+                baseWalk ? findRoute(fromGids, toGids, depMin, {}, { noWalk: true }) : base);
+            // by arrival (as in the candidate list); for the same arrival, later departure (shorter wait) first
+            out.sort(function (a, b) {
+                return (a.arr ?? Infinity) - (b.arr ?? Infinity) || (b.dep ?? 0) - (a.dep ?? 0);
+            });
+            return out.concat(none);
+        }
+
+        return {
+          findRoute: findRoute,
+          findMultipleRoutes: findMultipleRoutes,
+          findRoutesByViewpoint: findRoutesByViewpoint,
+          countTransfers: countTransfers,
+          // Used by the page to show whether a boundary is a transfer or the same train continuing.
+          //   Same function as countTransfers, so counts and display agree.
+          //   Usage: isContinuation(path.slice(0, i), path[i].tripIdx) (i = the current leg)
+          isContinuation: isContinuation,
+          PARAMS: ROUTER_PARAMS,
+        };
+      }
+
+      return {
+        PARAMS: PARAMS,
+        toMin: toMin,
+        stopName: stopName,
+        tripLabel: tripLabel,
+        buildGroupTrips: buildGroupTrips,
+        createRouter: createRouter,
+      };
+    }));
+    // <<<END ROUTER_CORE>>>
+    // ^^^ end of the search core ^^^
+    const ROUTER_PARAMS = RouterCore.PARAMS;
+    let _router = null;
+    function getRouter() { if (!_router) _router = RouterCore.createRouter(DATA); return _router; }
+    function findRoute(fromGids, toGids, depMin, blockedLines) {
+        return getRouter().findRoute(fromGids, toGids, depMin, blockedLines);
+    }
+    function findMultipleRoutes(fromGids, toGids, depMin, maxRoutes) {
+        return getRouter().findMultipleRoutes(fromGids, toGids, depMin, maxRoutes);
+    }
+
+    // ===== Build animation frames =====
+    // depMin = the query departure time (minutes); it becomes the departure when the itinerary is all walking
+    //   (otherwise it would show 0:00)
+    function buildAnimFrames(path, depMin) {
+        // produce a sequence of [t_min, lat, lon] tuples for the entire journey
+        const frames = [];
+        for (let li = 0; li < path.length; li++) {
+            const leg = path[li];
+            // walking leg: no trip, so place the two end points the walking time apart
+            if (leg.walk) {
+                const ga = DATA.groups[leg.boardStation], gb = DATA.groups[leg.alightStation];
+                let t0;
+                if (frames.length) {
+                    t0 = frames[frames.length - 1][0];
+                } else {
+                    // Leading walk: the departure of the next trip minus the walking time (this sets the departure).
+                    //   With no trip at all (all walking), start walking at the query time
+                    t0 = (depMin != null) ? depMin : 0;
+                    for (let k = li + 1; k < path.length; k++) {
+                        if (path[k].walk) continue;
+                        const nt = DATA.trips[path[k].tripIdx];
+                        const sh = (path[k].dayShift !== undefined) ? path[k].dayShift : 0;
+                        const bd = (toMin(nt.dep[path[k].boardIdx]) ?? toMin(nt.arr[path[k].boardIdx]));
+                        if (bd != null) t0 = bd + sh - leg.walkMin;
+                        break;
+                    }
+                }
+                frames.push([t0, ga.lat, ga.lon]);
+                frames.push([t0 + leg.walkMin, gb.lat, gb.lon]);
+                continue;
+            }
+            const trip = DATA.trips[leg.tripIdx];
+            let prevT = null;
+            // dep of board station
+            // PREV_DAY_BOARDING: when the search set dayShift (day shift of the boarded trip) on the leg, add it
+            //   (one day earlier for a previous-day trip; a backward shift cannot be recovered from the data's times). Otherwise 0 as before
+            const shift = (leg.dayShift !== undefined) ? leg.dayShift : 0;
+            let boardDep = (toMin(trip.dep[leg.boardIdx]) ?? toMin(trip.arr[leg.boardIdx])) + shift;
+            const g0 = DATA.groups[leg.boardStation];
+            frames.push([boardDep, g0.lat, g0.lon]);
+            // intermediate stops
+            for (let j = leg.boardIdx + 1; j <= leg.alightIdx; j++) {
+                const gid = trip.s[j];
+                const g = DATA.groups[gid];
+                let arr = toMin(trip.arr[j]) ?? toMin(trip.dep[j]);
+                if (arr == null) arr = (prevT != null) ? prevT + 1 : boardDep;
+                else arr += shift;
+                let normArr = arr;
+                while (normArr < boardDep) normArr += 1440;
+                frames.push([normArr, g.lat, g.lon]);
+                prevT = normArr;
+            }
+        }
+        // normalize to single monotonic timeline (handle day rollover from depMin)
+        // already monotonic since we kept adding 1440 if needed
+        for (let i = 1; i < frames.length; i++) {
+            while (frames[i][0] < frames[i-1][0]) frames[i][0] += 1440;
+        }
+        return frames;
+    }
+
+    function positionAtT(frames, t) {
+        if (t <= frames[0][0]) return [frames[0][1], frames[0][2]];
+        if (t >= frames[frames.length-1][0]) return [frames[frames.length-1][1], frames[frames.length-1][2]];
+        let lo = 0, hi = frames.length - 1;
+        while (lo < hi - 1) {
+            const mid = (lo + hi) >> 1;
+            if (frames[mid][0] <= t) lo = mid; else hi = mid;
+        }
+        const a = frames[lo], b = frames[hi];
+        const u = (b[0] === a[0]) ? 0 : (t - a[0]) / (b[0] - a[0]);
+        return [a[1] + (b[1]-a[1])*u, a[2] + (b[2]-a[2])*u];
+    }
+
+    // ===== Display =====
+    let routeLayers = [];
+    let stationMarkers = [];
+    let trainMarker = null;
+    let currentPath = null;
+    let currentFrames = null;
+    let currentDepMin = 0;
+    let currentArrMin = 0;
+    let simTime = 0;
+    let speed = 60;
+    let playing = false;
+    let lastFrame = performance.now();
+    let lastCurrentRow = null;
+    let followMap = true;
+
+    function clearMap() {
+        for (const l of routeLayers) map.removeLayer(l);
+        routeLayers = [];
+        for (const m of stationMarkers) map.removeLayer(m);
+        stationMarkers = [];
+        if (trainMarker) { map.removeLayer(trainMarker); trainMarker = null; }
+    }
+
+    function showRoute(path) {
+        clearMap();
+        currentPath = path;
+        currentFrames = buildAnimFrames(path, lastDepMin);
+        currentDepMin = currentFrames[0][0];
+        currentArrMin = currentFrames[currentFrames.length - 1][0];
+        simTime = currentDepMin;
+        playing = false;
+        lastCurrentRow = null;
+        document.getElementById('play-btn').textContent = '▶ 出発';
+
+        // Polylines per leg with line-color
+        const allBounds = L.latLngBounds([]);
+        for (const leg of path) {
+            if (leg.walk) {   // walking leg: draw a dashed line
+                const ga = DATA.groups[leg.boardStation], gb = DATA.groups[leg.alightStation];
+                L.polyline([[ga.lat, ga.lon], [gb.lat, gb.lon]], {
+                    renderer, color: '#666', weight: 3, opacity: 0.8, dashArray: '4 6'
+                }).addTo(map);
+                allBounds.extend([ga.lat, ga.lon]); allBounds.extend([gb.lat, gb.lon]);
+                continue;
+            }
+            const trip = DATA.trips[leg.tripIdx];
+            const color = lineColor(trip.l);
+            const coords = [];
+            for (let j = leg.boardIdx; j <= leg.alightIdx; j++) {
+                const g = DATA.groups[trip.s[j]];
+                coords.push([g.lat, g.lon]);
+                allBounds.extend([g.lat, g.lon]);
+            }
+            const poly = L.polyline(coords, {
+                renderer, color, weight: 4, opacity: 0.85, lineJoin: 'round'
+            }).addTo(map);
+            routeLayers.push(poly);
+        }
+        // Endpoint + transfer markers
+        const stopGids = [path[0].boardStation];
+        for (const leg of path) stopGids.push(leg.alightStation);
+        for (let i = 0; i < stopGids.length; i++) {
+            const g = DATA.groups[stopGids[i]];
+            const isEnd = (i === 0 || i === stopGids.length - 1);
+            const m = L.circleMarker([g.lat, g.lon], {
+                renderer, radius: isEnd ? 7 : 5, color: '#fff', weight: 1.5,
+                fillColor: isEnd ? '#1f6feb' : '#ffa657', fillOpacity: 1.0,
+            }).addTo(map);
+            m.bindTooltip(esc(g.name), { direction: 'top', offset: [0, -4], permanent: isEnd });
+            stationMarkers.push(m);
+        }
+        map.fitBounds(allBounds, { padding: [80, 80] });
+
+        renderTripPanel(path);
+        document.getElementById('control-panel').style.display = 'block';
+        recomputeSpeed();
+        updateAnim();
+    }
+
+    function renderTripPanel(path) {
+        // Take the end stations from the itinerary's end station groups, not from the trips,
+        //   because a leading or trailing walk would fail on DATA.trips[undefined]
+        const legName = (l, end) => {
+            if (l.walk) return DATA.groups[end === 'from' ? l.boardStation : l.alightStation].name;
+            const t = DATA.trips[l.tripIdx];
+            return stopName(DATA, t, end === 'from' ? l.boardIdx : l.alightIdx);
+        };
+        const firstRide = path.find(l => !l.walk);
+        const fromName = legName(path[0], 'from');
+        const toName = legName(path[path.length - 1], 'to');
+        const arr = currentArrMin;
+        const dep = currentDepMin;
+        const headColor = firstRide ? lineColor(DATA.trips[firstRide.tripIdx].l) : '#888';   // gray when all legs are walks
+        document.getElementById('tp-title').innerHTML =
+            `<span style="color:${headColor}">●</span> ${esc(fromName)} → ${esc(toName)}`;
+        const dayDiff = Math.floor(arr / 1440);
+        const arrLabel = dayDiff > 0 ? `<span style="color:#ffa657">+${dayDiff}日</span> ${fmtClock(arr)}` : fmtClock(arr);
+        // Wait before departure: an itinerary leaving after the query time involves waiting at the station.
+        //   The earliest-arrival route may leave later than the first available trip (青森→東京 at 08:00 leaves 13:30)
+        const wait = dep - lastDepMin;
+        const waitLabel = wait > 0
+            ? `<br><span style="color:#ffa657">出発まで ${fmtDuration(wait)} 待ち</span>（${fmtClock(lastDepMin)} 検索）` : '';
+        // the number of lines counts riding legs only (not walking legs)
+        document.getElementById('tp-sub').innerHTML =
+            `${fmtClock(dep)} 発 → ${arrLabel} 着<br>所要 <strong style="color:#f0f6fc">${fmtDuration(arr - dep)}</strong> ／ ${path.filter(l => !l.walk).length} 路線 ／ 乗換 ${getRouter().countTransfers(path)}回${waitLabel}`;
+
+        const container = document.getElementById('tp-legs');
+        container.innerHTML = '';
+        // build a time axis increasing over the whole itinerary (add 1440 to stay after the previous leg's arrival)
+        let runningT = currentDepMin;  // latest absolute minute (previous leg's arrival)
+        for (let li = 0; li < path.length; li++) {
+            const leg = path[li];
+            if (leg.walk) {   // walking leg
+                const wa = DATA.groups[leg.boardStation], wb = DATA.groups[leg.alightStation];
+                const wdiv = document.createElement('div');
+                wdiv.className = 'leg-block';
+                wdiv.style.borderLeftColor = '#888';
+                wdiv.innerHTML = '<div class="leg-line">徒歩 ' + leg.walkMin + ' 分</div>'
+                    + '<div class="leg-row">' + esc(wa.name) + ' → ' + esc(wb.name) + '</div>';
+                container.appendChild(wdiv);
+                runningT += leg.walkMin;
+                continue;
+            }
+            const trip = DATA.trips[leg.tripIdx];
+            const color = lineColor(trip.l);
+            const legDiv = document.createElement('div');
+            legDiv.className = 'leg-block';
+            legDiv.style.borderLeftColor = color;
+
+            const boardName = stopName(DATA, trip, leg.boardIdx);
+            const alightName = stopName(DATA, trip, leg.alightIdx);
+            const boardRaw = toMin(trip.dep[leg.boardIdx]) ?? toMin(trip.arr[leg.boardIdx]);
+            // determine this leg's dayOffset (at or after the previous leg's runningT)
+            // PREV_DAY_BOARDING: start from dayShift when the search set it (one day earlier for a previous-day trip); otherwise as before
+            let absBoard = boardRaw + (leg.dayShift !== undefined ? leg.dayShift : 0);
+            while (absBoard < runningT) absBoard += 1440;
+            const dayOffset = absBoard - boardRaw;
+            const alightRaw = toMin(trip.arr[leg.alightIdx]) ?? toMin(trip.dep[leg.alightIdx]);
+            let absAlight = alightRaw + dayOffset;
+            while (absAlight < absBoard) absAlight += 1440;
+
+            // Boundary with the previous leg, drawn here for three reasons:
+            //   (1) the next leg is not read, so a following walk cannot break it
+            //   (2) a continuation of the same through train (only the line name changes) is a stop, not a transfer;
+            //       it uses the same function as countTransfers (isContinuation), so it agrees with the transfer count
+            //   (3) waits after a walk can be shown too (from arriving on foot to boarding)
+            if (li > 0) {
+                const prevLeg = path[li - 1];
+                const wait = absBoard - runningT;
+                const cont = !prevLeg.walk && getRouter().isContinuation(path.slice(0, li), leg.tripIdx);
+                if (cont || wait > 0) {
+                    const w = document.createElement('div');
+                    w.className = 'leg-wait' + (cont ? ' leg-stay' : '');
+                    w.textContent = cont
+                        ? `同じ列車のまま（停車 ${fmtDuration(wait)}）`
+                        : `乗換 待時間 ${fmtDuration(wait)}`;
+                    container.appendChild(w);
+                }
+            }
+
+            const hdr = document.createElement('div');
+            hdr.className = 'leg-header';
+            hdr.innerHTML = `${esc(trip.l)} ${esc(tripLabel(trip))} <span class="line-tag">${esc(boardName)} ${fmtClock(absBoard)} → ${esc(alightName)} ${fmtClock(absAlight)}</span>`;
+            legDiv.appendChild(hdr);
+
+            // station list (within this leg, on the absolute time axis)
+            let prevAbs = absBoard;
+            for (let j = leg.boardIdx; j <= leg.alightIdx; j++) {
+                const gid = trip.s[j];
+                const g = DATA.groups[gid];
+                // The boarding row uses the departure time. The arrival time would be before the departure, get pushed a
+                //   day later by the while below and shift the whole leg by +1 day (same clock times, but the animation's
+                //   current-station highlight would not appear)
+                const rawT = (j === leg.boardIdx)
+                    ? (toMin(trip.dep[j]) ?? toMin(trip.arr[j]))
+                    : (toMin(trip.arr[j]) ?? toMin(trip.dep[j]));
+                let absT = null;
+                if (rawT != null) {
+                    absT = rawT + dayOffset;
+                    while (absT < prevAbs) absT += 1440;
+                    prevAbs = absT;
+                }
+                const row = document.createElement('div');
+                row.className = 'stop-row';
+                row.dataset.t = absT != null ? absT : '';
+                row.innerHTML = `<span class="stop-t">${absT != null ? fmtClock(absT) : '－'}</span><span class="stop-n">${esc(stopName(DATA, trip, j))}</span>`;
+                legDiv.appendChild(row);
+            }
+            container.appendChild(legDiv);
+
+            runningT = absAlight;
+        }
+        document.getElementById('trip-panel').style.display = 'block';
+    }
+
+    function recomputeSpeed() { /* speed is a constant via UI; no per-trip recompute */ }
+
+    function updateAnim() {
+        if (!currentFrames) return;
+        const pos = positionAtT(currentFrames, simTime);
+        if (!trainMarker) {
+            trainMarker = L.circleMarker(pos, {
+                renderer, radius: 9, color: '#fff', weight: 2,
+                fillColor: '#1f6feb', fillOpacity: 1.0,
+            }).addTo(map);
+        } else {
+            trainMarker.setLatLng(pos);
+        }
+        // follow the marker only while playing; panTo when it leaves the central 50% x 50%
+        if (playing && followMap) {
+            const p = map.latLngToContainerPoint(pos);
+            const sz = map.getSize();
+            const m = 0.25;
+            if (p.x < sz.x * m || p.x > sz.x * (1 - m) ||
+                p.y < sz.y * m || p.y > sz.y * (1 - m)) {
+                map.panTo(pos, { animate: true, duration: 0.7, noMoveStart: true });
+            }
+        }
+        document.getElementById('clock-mini').textContent = fmtClock(simTime);
+        const dur = currentArrMin - currentDepMin;
+        const pct = dur > 0 ? Math.min(1000, Math.max(0, ((simTime - currentDepMin) / dur) * 1000)) : 0;
+        document.getElementById('progress-slider').value = pct;
+        // stop row highlight + auto-scroll
+        let newCurrent = null;
+        for (const row of document.querySelectorAll('.stop-row')) {
+            const rt = parseFloat(row.dataset.t);
+            if (isNaN(rt)) { row.className = 'stop-row'; continue; }
+            if (rt < simTime - 3) row.className = 'stop-row passed';
+            else if (rt <= simTime + 3) { row.className = 'stop-row current'; newCurrent = row; }
+            else row.className = 'stop-row';
+        }
+        if (!newCurrent) {
+            const rows = document.querySelectorAll('.stop-row');
+            for (let i = rows.length - 1; i >= 0; i--) {
+                if (parseFloat(rows[i].dataset.t) <= simTime) { newCurrent = rows[i]; break; }
+            }
+        }
+        if (newCurrent && newCurrent !== lastCurrentRow) {
+            lastCurrentRow = newCurrent;
+            const panel = document.getElementById('trip-panel');
+            const target = newCurrent.offsetTop + newCurrent.offsetHeight / 2 - panel.clientHeight / 2;
+            panel.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+        }
+    }
+
+    function frameLoop(now) {
+        const dt = (now - lastFrame) / 1000;
+        lastFrame = now;
+        if (playing && currentFrames) {
+            simTime += speed * dt;
+            if (simTime >= currentArrMin) {
+                simTime = currentArrMin;
+                playing = false;
+                document.getElementById('play-btn').textContent = '◀ もう一度';
+            }
+            updateAnim();
+        }
+        requestAnimationFrame(frameLoop);
+    }
+    requestAnimationFrame(frameLoop);
+
+    // ===== UI bindings =====
+    const originInput = document.getElementById('origin-input');
+    const destInput = document.getElementById('dest-input');
+    const timeInput = document.getElementById('time-input');
+    let lastRoutes = [];
+    let lastDepMin = 0;   // departure time of the last query (passed to buildAnimFrames)
+
+    function runSearch() {
+        const o = originInput.value.trim();
+        const d = destInput.value.trim();
+        const t = timeInput.value || '08:00';
+        const list = document.getElementById('candidate-list');
+        const panel = document.getElementById('candidates-panel');
+        list.innerHTML = '';
+        panel.style.display = 'block';
+        if (!o || !d) {
+            list.innerHTML = '<div class="no-result">出発駅と到着駅を入力してください</div>';
+            return;
+        }
+        const fromGids = resolveGroupIds(o);
+        const toGids = resolveGroupIds(d);
+        if (!fromGids || !toGids) {
+            list.innerHTML = '<div class="no-result">駅名が見つかりません</div>';
+            return;
+        }
+        const depMin = toMin(t);
+        list.innerHTML = '<div class="no-result">経路を検索中…</div>';
+        setTimeout(() => {
+            const routes = findMultipleRoutes(fromGids, toGids, depMin, 3);
+            lastRoutes = routes.slice();
+            lastDepMin = depMin;
+            list.innerHTML = '';
+            if (!routes || routes.length === 0) {
+                list.innerHTML = '<div class="no-result">経路が見つかりませんでした</div>';
+                return;
+            }
+            // Draw one candidate card (shared by the candidate list and other views). lastRoutes[i] is card i's itinerary
+            let nCards = 0;
+            function addCandidate(path, tags) {
+                const i = nCards++;
+                if (i >= routes.length) lastRoutes.push(path);   // append the other views' itineraries
+                // take departure and arrival from frames (reading the first or last trip directly would fail
+                //   on DATA.trips[undefined] when that leg is a walk)
+                const frames = buildAnimFrames(path, depMin);
+                const realDep = frames[0][0];
+                const realArr = frames[frames.length-1][0];
+                const dur = realArr - realDep;
+
+                const el = document.createElement('div');
+                el.className = 'candidate';
+                el.dataset.idx = i;
+                // Merge continuations of the same through train (only the line name changes) into one row.
+                //   Uses isContinuation like countTransfers, so the number of ride rows = transfers + 1
+                //   (the number of trains ridden).
+                const groups = [];
+                for (let li = 0; li < path.length; li++) {
+                    const leg = path[li];
+                    if (leg.walk) { groups.push({ walk: true, min: leg.walkMin }); continue; }   // walking leg
+                    const tr = DATA.trips[leg.tripIdx];
+                    const prev = groups.length ? groups[groups.length - 1] : null;
+                    if (prev && !prev.walk && getRouter().isContinuation(path.slice(0, li), leg.tripIdx)) {
+                        if (prev.lines[prev.lines.length - 1] !== tr.l) prev.lines.push(tr.l);
+                        if (prev.nums.indexOf(tripLabel(tr)) < 0) prev.nums.push(tripLabel(tr));
+                        continue;
+                    }
+                    groups.push({ walk: false, lines: [tr.l], nums: [tripLabel(tr)], color: lineColor(tr.l) });
+                }
+                let legsHtml = '';
+                for (const g of groups) {
+                    if (g.walk) {
+                        legsHtml += `<div class="leg"><div class="leg-dot" style="background:#888"></div>徒歩 ${g.min} 分</div>`;
+                        continue;
+                    }
+                    const num = g.nums.join('／');
+                    const through = g.lines.length > 1 ? '<span class="leg-through">直通</span>' : '';
+                    legsHtml += `<div class="leg leg-ride"><div class="leg-dot" style="background:${g.color}"></div>`
+                              + `${esc(g.lines.join('→'))} ${esc(num)}${through}</div>`;
+                }
+                const tagHtml = (tags && tags.length)
+                    ? `<div>${tags.map(t => `<span class="vp-tag">${t}</span>`).join('')}</div>` : '';
+                el.innerHTML = `
+                    ${tagHtml}
+                    <div class="cand-head">
+                        <div>${fmtClock(realDep)} 発 → ${fmtClock(realArr)} 着</div>
+                        <div class="total">${fmtDuration(dur)}</div>
+                    </div>
+                    <div class="cand-detail">乗換 ${getRouter().countTransfers(path)} 回${realDep > depMin ? `　<span style="color:#ffa657">出発まで ${fmtDuration(realDep - depMin)} 待ち</span>` : ''}</div>
+                    <div class="cand-detail">${legsHtml}</div>
+                `;
+                el.onclick = () => selectCandidate(i);
+                list.appendChild(el);
+                return el;
+            }
+            const cardOf = [];
+            for (let i = 0; i < routes.length; i++) cardOf.push(addCandidate(routes[i], null));
+
+            // Other views (routes by viewpoint). If the candidate list has the same itinerary, just add the tag
+            if (getRouter().PARAMS.VIEWPOINT_ROUTES) {
+                const vps = getRouter().findRoutesByViewpoint(fromGids, toGids, depMin, { base: routes[0] });
+                const sigOf = p => p.map(l => l.walk ? 'w' + l.boardStation + '-' + l.alightStation
+                                                     : l.tripIdx + ':' + l.boardIdx + '-' + l.alightIdx).join('|');
+                const known = {};
+                for (let i = 0; i < routes.length; i++) known[sigOf(routes[i])] = i;
+                const rest = [];
+                for (const v of vps) {
+                    if (!v.path) { rest.push(v); continue; }
+                    const at = known[sigOf(v.path)];
+                    if (at === undefined) { rest.push(v); continue; }
+                    // itinerary already in the candidate list: add the tag to it
+                    const card = cardOf[at];
+                    const tagHtml = v.labels.map(t => `<span class="vp-tag">${t}</span>`).join('');
+                    card.insertAdjacentHTML('afterbegin', `<div>${tagHtml}</div>`);
+                }
+                if (rest.length) {
+                    const h = document.createElement('div');
+                    h.className = 'vp-head';
+                    h.textContent = 'ほかの見方';
+                    list.appendChild(h);
+                    for (const v of rest) {
+                        if (v.path) { addCandidate(v.path, v.labels); continue; }
+                        const n = document.createElement('div');
+                        n.className = 'vp-none';
+                        n.textContent = `${v.labels.join('・')}：行ける経路がありません`;
+                        list.appendChild(n);
+                    }
+                }
+            }
+            selectCandidate(0);
+        }, 50);
+    }
+    function selectCandidate(i) {
+        for (const el of document.querySelectorAll('.candidate')) el.classList.remove('selected');
+        document.querySelectorAll('.candidate')[i]?.classList.add('selected');
+        showRoute(lastRoutes[i]);
+    }
+
+    document.getElementById('search-btn').onclick = runSearch;
+    document.getElementById('reset-btn').onclick = () => {
+        originInput.value = ''; destInput.value = '';
+        document.getElementById('candidates-panel').style.display = 'none';
+        document.getElementById('trip-panel').style.display = 'none';
+        document.getElementById('control-panel').style.display = 'none';
+        clearMap();
+        map.setView([36.0, 137.0], 5);
+    };
+    originInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+    destInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+
+    for (const btn of document.querySelectorAll('.preset')) {
+        btn.onclick = () => {
+            originInput.value = btn.dataset.o;
+            destInput.value = btn.dataset.d;
+            if (btn.dataset.t) timeInput.value = btn.dataset.t;
+            runSearch();
+        };
+    }
+    document.getElementById('play-btn').onclick = () => {
+        if (!currentFrames) return;
+        if (simTime >= currentArrMin) simTime = currentDepMin;
+        playing = !playing;
+        document.getElementById('play-btn').textContent = playing ? '❚❚ 一時停止' : '▶ 出発';
+        lastFrame = performance.now();
+    };
+    document.getElementById('progress-slider').oninput = e => {
+        if (!currentFrames) return;
+        const pct = parseFloat(e.target.value) / 1000;
+        simTime = currentDepMin + (currentArrMin - currentDepMin) * pct;
+        updateAnim();
+    };
+    for (const btn of document.querySelectorAll('.speed-group .speed-btn')) {
+        btn.onclick = () => {
+            for (const b of document.querySelectorAll('.speed-group .speed-btn')) b.classList.remove('active');
+            btn.classList.add('active');
+            speed = parseFloat(btn.dataset.speed);
+        };
+    }
+    // follow toggle
+    function updateFollowBtn() {
+        const b = document.getElementById('follow-btn');
+        if (!b) return;
+        b.classList.toggle('active', followMap);
+        b.textContent = followMap ? '🎯 追従' : '⊘ 固定';
+    }
+    document.getElementById('follow-btn').onclick = () => {
+        followMap = !followMap;
+        updateFollowBtn();
+        if (followMap && trainMarker) {
+            map.panTo(trainMarker.getLatLng(), { animate: true });
+        }
+    };
+})();
+</script>
+</body>
+</html>

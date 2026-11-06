@@ -1,0 +1,5 @@
+venv/
+gtfs_for_pyraptor/
+pyraptor_out/
+compare_out/
+out/

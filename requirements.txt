@@ -1,0 +1,7 @@
+# Python packages for rebuilding the dataset (Python 3.14): pip install -r requirements.txt
+# These are the versions used to build the published dataset (v1.0). et-xmlfile and numpy are pinned
+# as well because openpyxl and shapely use them.
+openpyxl==3.1.5
+et-xmlfile==2.0.0
+shapely==2.1.2
+numpy==2.4.4

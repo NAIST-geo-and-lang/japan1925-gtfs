@@ -1,0 +1,8 @@
+{
+  "transitServiceStart": "1925-01-01",
+  "transitServiceEnd": "1925-12-31",
+  "maxTransferDuration": "PT45M",
+  "transitFeeds": [
+    { "type": "gtfs", "feedId": "J1925", "source": "gtfs.zip" }
+  ]
+}

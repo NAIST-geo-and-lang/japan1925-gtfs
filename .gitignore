@@ -1,0 +1,27 @@
+# Python environment made in "Rebuilding the dataset" of README.md (tests/pyraptor/.gitignore covers its own venv/)
+/.venv/
+
+# Transcription workbooks placed by scripts/fetch_transcription.py (from the Zenodo dataset)
+/data/2_timetable_with_tripnum_v1/
+/data/1_timetable_xlsx_v1/
+/data/1_timetable_xlsx_added_v1/
+
+# Reference data and tools downloaded by the scripts (fetch_external_sources.py, check_on_land.py, run_gtfs_validator.sh, run_otp_check.sh)
+/data/external/
+
+# Intermediate and output files of the build and the tests
+/data/3_stop_times_intermediate_v1/
+/data/gtfs_v1_release/
+/data/gtfs_v1_release_*/
+/data/reports/
+/tests/route_search/rq8_unreachable_stops.csv
+
+# Dataset archive and route-search network made in "Getting started" of README.md
+/japan1925-gtfs-v1.0.zip
+/japan1925-gtfs-v1.0/
+/demo/route_planner/router_data.js
+/demo/route_planner/router_data.json
+
+__pycache__/
+*.pyc
+.DS_Store

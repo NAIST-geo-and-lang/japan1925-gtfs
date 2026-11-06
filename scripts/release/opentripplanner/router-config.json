@@ -1,0 +1,10 @@
+{
+  "routingDefaults": {
+    "maxJourneyDuration": "PT96H",
+    "searchWindow": "PT24H",
+    "transferSlack": "PT0S"
+  },
+  "transit": {
+    "maxNumberOfTransfers": 30
+  }
+}

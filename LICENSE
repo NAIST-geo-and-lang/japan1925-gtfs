@@ -1,0 +1,33 @@
+This repository contains software (code) and data (tables), which are licensed separately.
+
+Data: the tables read by the build and the tests, that is, the CSV and JSON files under data/ and the CSV files under tests/:
+Creative Commons Attribution 4.0 International (CC BY 4.0).
+  Full text: https://creativecommons.org/licenses/by/4.0/legalcode
+  Attributions required by the sources of the station coordinates (data/knowledge/) are listed in the README of the
+  dataset (https://doi.org/10.5281/zenodo.23200420, section "Station coordinates and their sources"; the same
+  README is scripts/release/README_release.md in this repository).
+
+Software: all other files (scripts, the journey planner, configuration files and documentation): MIT License.
+
+Third-party material: the old-to-new character pairs in scripts/release/shinjitai_map.csv whose source column reads
+"kyujipy 0.6.8" are taken from kyujipy 0.6.8 (https://github.com/DrTurnon/kyujipy), which is licensed under the
+MIT License with the notice "Copyright (c) 2017-2025 Emmanuel Ternon" and the same permission notice as below.
+
+MIT License
+
+Copyright (c) 2026 Hiroki Ouchi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
