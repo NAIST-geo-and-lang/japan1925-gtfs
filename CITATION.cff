@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below. If you use the dataset, please cite the dataset itself (https://doi.org/10.5281/zenodo.23200420)."
+type: software
+title: "Japan1925-GTFS processing code"
+abstract: "Code to rebuild the Japan1925-GTFS dataset (version v1.0) from the published transcription workbooks, and to test it, together with a journey planner that runs in a web browser."
+version: v1.0
+date-released: 2026-11-06
+license: MIT
+repository-code: "https://github.com/NAIST-geo-and-lang/japan1925-gtfs"
+keywords:
+  - GTFS
+  - historical timetable
+  - historical GIS
+  - transport history
+authors:
+  - family-names: Ouchi
+    given-names: Hiroki
+    affiliation: Nara Institute of Science and Technology
+    orcid: "https://orcid.org/0009-0006-5676-8950"
+  - family-names: Yamamoto
+    given-names: Shota
+    affiliation: Tokyo Metropolitan University
+    orcid: "https://orcid.org/0009-0009-1319-9876"
+references:
+  - type: data
+    title: "Japan1925-GTFS: a dataset of scheduled railway and ferry services from Japan's 1925 national timetable"
+    version: v1.0
+    doi: 10.5281/zenodo.23200420
+    url: "https://doi.org/10.5281/zenodo.23200420"
+    publisher:
+      name: Zenodo
+    year: 2026
+    authors:
+      - family-names: Ouchi
+        given-names: Hiroki
+      - family-names: Yamamoto
+        given-names: Shota
